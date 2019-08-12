@@ -1,53 +1,70 @@
-use std::thread;
-use std::sync;
-use std::sync::mpsc::{ Sender, Receiver, RecvError };
+// to format codebase use `$ cargo fmt`
 
-fn square_things(input : Receiver<f32>, output : Sender<f32>) -> thread::JoinHandle<()> {
-    let worker = thread::spawn(move || loop {
-        match input.recv() {
+use std::sync;
+use std::sync::mpsc::{Receiver, RecvError, Sender};
+use std::thread;
+
+struct SquaringWorkerParams {
+    input: Receiver<f32>,
+    output: Sender<f32>,
+}
+
+#[allow(non_snake_case)]
+fn SquareWorker(param: SquaringWorkerParams) {
+    loop {
+        match param.input.recv() {
             Ok(x) => {
-                output.send(x*x).unwrap();
+                param.output.send(x * x).unwrap();
             }
-            Err(RecvError) => { break; }
+            Err(RecvError) => {
+                break;
+            }
         }
-    });
+    }
+}
+
+fn square_things(param: SquaringWorkerParams) -> thread::JoinHandle<()> {
+    let worker = thread::spawn(move || SquareWorker(param));
     return worker;
 }
 
-fn half_things(input : Receiver<f32>, output : Sender<f32>) -> thread::JoinHandle<()> {
+fn half_things(input: Receiver<f32>, output: Sender<f32>) -> thread::JoinHandle<()> {
     let worker = thread::spawn(move || loop {
         match input.recv() {
             Ok(x) => {
                 output.send(x / 2f32).unwrap();
             }
-            Err(RecvError) => { break; }
+            Err(RecvError) => {
+                break;
+            }
         }
     });
     return worker;
 }
 
-fn add_things(input_a : Receiver<f32>, input_b : Receiver<f32>, output : Sender<f32>) -> thread::JoinHandle<()> {
+fn add_things(
+    input_a: Receiver<f32>,
+    input_b: Receiver<f32>,
+    output: Sender<f32>,
+) -> thread::JoinHandle<()> {
     let worker = thread::spawn(move || loop {
         match input_a.recv() {
-            Ok(x) => {
-                match input_b.recv() {
-                    Ok(y) => {
-                        output.send(x+y).unwrap();
-                    }
-                    _ => break
+            Ok(x) => match input_b.recv() {
+                Ok(y) => {
+                    output.send(x + y).unwrap();
                 }
-            }
-            _ => break
+                _ => break,
+            },
+            _ => break,
         };
     });
     return worker;
 }
 
-
 fn main() {
-    let a = vec!(1f32,2f32,3f32);
-    let b = vec!(6f32,4f32,2f32);
-    let mut c = vec!();
+    let a = vec![1f32, 2f32, 3f32];
+    let b = vec![6f32, 4f32, 2f32];
+    let mut c = vec![];
     // we what to get a^2 + b/2 using threads
     // w1 will do a^2
     // w2 will do b/2
@@ -59,7 +76,10 @@ fn main() {
         let (sa2, ra2) = sync::mpsc::channel();
         let (sb, rb) = sync::mpsc::channel();
         let (sb2, rb2) = sync::mpsc::channel();
-        w1 = square_things(ra, sa2);
+        w1 = square_things(SquaringWorkerParams {
+            input: ra,
+            output: sa2,
+        });
         w2 = half_things(rb, sb2);
         w3 = add_things(ra2, rb2, sc);
         for x in a {
